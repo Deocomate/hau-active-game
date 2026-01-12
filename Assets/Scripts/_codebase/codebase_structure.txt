@@ -1,0 +1,100 @@
+# Scripts | Structure | 2026-01-11 08:11:54
+
+.
+├── Fruit/
+│   ├── Blade.cs
+│   ├── Blade.cs.meta
+│   ├── BombScript.cs
+│   ├── BombScript.cs.meta
+│   ├── Cursor.cs
+│   ├── Cursor.cs.meta
+│   ├── CursorManager.cs
+│   ├── CursorManager.cs.meta
+│   ├── FruitGameManager.cs
+│   ├── FruitGameManager.cs.meta
+│   ├── FruitRunFruits.cs
+│   ├── FruitRunFruits.cs.meta
+│   ├── FruitRunGameManager.cs
+│   ├── FruitRunGameManager.cs.meta
+│   ├── FruitRunSpawnObjects.cs
+│   ├── FruitRunSpawnObjects.cs.meta
+│   ├── Fruits.cs
+│   ├── Fruits.cs.meta
+│   ├── SpawnObjects.cs
+│   └── SpawnObjects.cs.meta
+├── Hole/
+│   ├── HoleFloorManager.cs
+│   ├── HoleFloorManager.cs.meta
+│   ├── HolePortal.cs
+│   ├── HolePortal.cs.meta
+│   ├── HoleTileManager.cs
+│   ├── HoleTileManager.cs.meta
+│   ├── LineCode.cs
+│   ├── LineCode.cs.meta
+│   ├── PoseTracking.cs
+│   ├── PoseTracking.cs.meta
+│   ├── Wall.cs
+│   ├── Wall.cs.meta
+│   ├── WallSpawner.cs
+│   └── WallSpawner.cs.meta
+├── Menu&Shop/
+│   ├── MainMenuManager.cs
+│   ├── MainMenuManager.cs.meta
+│   ├── MainMenuPlayerController.cs
+│   ├── MainMenuPlayerController.cs.meta
+│   ├── MainMenuTilesManager.cs
+│   ├── MainMenuTilesManager.cs.meta
+│   ├── RotateModel.cs
+│   ├── RotateModel.cs.meta
+│   ├── ShopManager.cs
+│   └── ShopManager.cs.meta
+├── Python-Mediapipe/
+│   ├── _codebase/
+│   ├── app/
+│   │   ├── config.py
+│   │   ├── config.py.meta
+│   │   ├── detection.py
+│   │   ├── detection.py.meta
+│   │   ├── main.py
+│   │   ├── main.py.meta
+│   │   ├── window_manager.py
+│   │   └── window_manager.py.meta
+│   ├── _codebase.meta
+│   ├── app.meta
+│   ├── main.py
+│   ├── main.py.meta
+│   ├── requirements.txt
+│   ├── requirements.txt.meta
+│   ├── scripts.txt
+│   ├── scripts.txt.meta
+│   └── venv.meta
+├── Run/
+│   ├── CameraController.cs
+│   ├── CameraController.cs.meta
+│   ├── Coin.cs
+│   ├── Coin.cs.meta
+│   ├── FloorManager.cs
+│   ├── FloorManager.cs.meta
+│   ├── FruitPortal.cs
+│   ├── FruitPortal.cs.meta
+│   ├── PlayerController.cs
+│   ├── PlayerController.cs.meta
+│   ├── PlayerManager.cs
+│   ├── PlayerManager.cs.meta
+│   ├── RunManager.cs
+│   ├── RunManager.cs.meta
+│   ├── TileManager.cs
+│   └── TileManager.cs.meta
+├── CursorController.cs
+├── CursorController.cs.meta
+├── Events.cs
+├── Events.cs.meta
+├── Fruit.meta
+├── Hole.meta
+├── Menu&Shop.meta
+├── Python-Mediapipe.meta
+├── README.md
+├── README.md.meta
+├── Run.meta
+├── SocketClient.cs
+└── SocketClient.cs.meta

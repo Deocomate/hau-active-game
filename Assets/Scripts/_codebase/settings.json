@@ -1,0 +1,43 @@
+{
+	"track_config": [
+		{
+			"name": "codebase",
+			"tracks": ["*.py", "*.cs"],
+			"ignore_patterns": []
+		}
+	],
+	"global_ignore_patterns": [
+		"venv",
+		".git/",
+		"node_modules/",
+		"vendor/",
+		"bower_components/",
+		"storage/",
+		"build/",
+		"dist/",
+		"out/",
+		"target/",
+		".svn/",
+		".hg/",
+		".bzr/",
+		".idea/",
+		".vscode/",
+		".project/",
+		".settings/",
+		"__pycache__/",
+		".pytest_cache/",
+		".mypy_cache/",
+		".ruff_cache/",
+		"coverage/",
+		"logs/",
+		"tmp/",
+		"temp/",
+		"*.lockb",
+		"*.log",
+		"*.tmp",
+		"*.bak",
+		"*.swp",
+		"*.DS_Store"
+	],
+	"description": "Configure multiple output files based on track patterns."
+}

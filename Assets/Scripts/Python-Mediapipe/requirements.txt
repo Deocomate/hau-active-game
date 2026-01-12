@@ -1,0 +1,7 @@
+# MediaPipe Pose & Hand Detection Requirements
+# Python 3.8 - 3.11 recommended
+
+# Core dependencies
+opencv-python>=4.8.0,<4.11.0
+mediapipe>=0.10.9,<0.10.21
+numpy>=1.21.0,<2.0.0

@@ -1,0 +1,1968 @@
+# codebase | 39 files | 2026-01-11 08:11:54
+
+// CursorController.cs
+using UnityEngine;
+using UnityEngine.UI;
+using UnityEngine.EventSystems;
+using System.Collections.Generic;
+using System.Globalization;
+public class CursorController : MonoBehaviour
+{
+    public SocketClient socketClient;
+    public RectTransform cursorTransform;
+    public float hoverDuration = 2f;
+    private float hoverTimer = 0f;
+    private Button hoveredButton = null;
+    private Canvas currentCanvas;
+    void Start()
+    {
+        InitializeSocketClient();
+    }
+    void Update()
+    {
+        if (socketClient == null) return;
+        string data = socketClient.Data;
+        if (string.IsNullOrEmpty(data))
+        {
+            return;
+        }
+        try
+        {
+            data = data.Replace("[", "").Replace("]", "");
+            data = data.Replace("(", "").Replace(")", "");
+            data = data.Replace(" ", "");
+            string[] points = data.Split(',');
+            if (points.Length < 20)
+            {
+                return;
+            }
+            if (!float.TryParse(points[18], NumberStyles.Any, CultureInfo.InvariantCulture, out float handX) ||
+                !float.TryParse(points[19], NumberStyles.Any, CultureInfo.InvariantCulture, out float handY))
+            {
+                return;
+            }
+            float x = 400 + handX * -2;
+            float y = 250 + -(handY * 2);
+            cursorTransform.localPosition = new Vector3(x, y, 0);
+            CheckForHoverAndClick();
+        }
+        catch (System.Exception e)
+        {
+            Debug.LogWarning($"Error parsing cursor data: {e.Message}");
+        }
+    }
+    void CheckForHoverAndClick()
+    {
+        PointerEventData pointerData = new PointerEventData(EventSystem.current)
+        {
+            position = cursorTransform.position
+        };
+        List<RaycastResult> results = new List<RaycastResult>();
+        EventSystem.current.RaycastAll(pointerData, results);
+        foreach (RaycastResult result in results)
+        {
+            Button button = result.gameObject.GetComponent<Button>();
+            if (button != null)
+            {
+                Debug.Log("Hovered over button: " + button.name);
+                if (hoveredButton == button)
+                {
+                    hoverTimer += Time.deltaTime;
+                    if (hoverTimer >= hoverDuration)
+                    {
+                        button.onClick.Invoke();
+                        Debug.Log("Button clicked: " + button.name);
+                        hoverTimer = 0f;
+                    }
+                }
+                else
+                {
+                    hoveredButton = button;
+                    hoverTimer = 0f;
+                }
+                return;
+            }
+        }
+        hoveredButton = null;
+        hoverTimer = 0f;
+    }
+    public void SetCursorCanvas(Canvas canvas)
+    {
+        currentCanvas = canvas;
+        cursorTransform.SetParent(currentCanvas.transform, false);
+    }
+    private void InitializeSocketClient()
+    {
+        if (socketClient == null)
+        {
+            socketClient = FindObjectOfType<SocketClient>();
+            if (socketClient == null)
+            {
+                Debug.LogError("SocketClient is not assigned and not found in the scene.");
+            }
+        }
+    }
+}
+
+// Events.cs
+using System.Collections;
+using System.Collections.Generic;
+using UnityEngine.SceneManagement;
+using UnityEngine;
+public class Events : MonoBehaviour
+{
+    public void Play()
+    {
+        SceneManager.LoadScene("Run");
+    }
+    public void Shop()
+    {
+        SceneManager.LoadScene("Shop");
+    }
+    public void Fruit()
+    {
+        SceneManager.LoadScene("Fruit");
+    }
+    public void FruitOnly()
+    {
+        SceneManager.LoadScene("FruitOnly");
+    }
+    public void Hole()
+    {
+        SceneManager.LoadScene("Hole");
+    }
+    public void MainMenu()
+    {
+        SceneManager.LoadScene("Menu");
+    }
+    public void Quit()
+    {
+        Application.Quit();
+    }
+}
+
+// SocketClient.cs
+using System;
+using System.Net;
+using System.Net.Sockets;
+using System.Text;
+using UnityEngine;
+public class SocketClient : MonoBehaviour
+{
+    private TcpClient socketConnection;
+    private NetworkStream networkStream;
+    public int Port = 5052;
+    public bool StartReceiving = true;
+    public bool PrintToConsole = false; // Tắt để debug trigger
+    public string Data;
+    private UdpClient udpClient;
+    public int UdpPort = 5053;
+    public static SocketClient Instance { get; private set; }
+    void Awake()
+    {
+        if (Instance == null)
+        {
+            Instance = this;
+            DontDestroyOnLoad(gameObject);
+        }
+        else
+        {
+            Destroy(gameObject);
+        }
+    }
+    void Start()
+    {
+        if (StartReceiving)
+        {
+            ConnectToServer();
+        }
+        udpClient = new UdpClient();
+    }
+    void ConnectToServer()
+    {
+        try
+        {
+            socketConnection = new TcpClient("127.0.0.1", Port);
+            networkStream = socketConnection.GetStream();
+            Debug.Log("Connected to the server.");
+        }
+        catch (Exception e)
+        {
+            Debug.LogError("Socket error: " + e);
+        }
+    }
+    void Update()
+    {
+        if (networkStream != null && networkStream.DataAvailable)
+        {
+            byte[] bytes = new byte[socketConnection.ReceiveBufferSize];
+            networkStream.Read(bytes, 0, bytes.Length);
+            string data = Encoding.ASCII.GetString(bytes).Trim('\0');
+            Data = data;
+            if (PrintToConsole)
+            {
+                Debug.Log(data);
+            }
+        }
+    }
+    public void SendUdpMessage(string message)
+    {
+        byte[] data = Encoding.UTF8.GetBytes(message);
+        udpClient.Send(data, data.Length, "127.0.0.1", UdpPort);
+    }
+    void OnApplicationQuit()
+    {
+        if (networkStream != null)
+            networkStream.Close();
+        if (socketConnection != null)
+            socketConnection.Close();
+        if (udpClient != null)
+            udpClient.Close();
+    }
+}
+
+// Fruit\Blade.cs
+using System.Collections;
+using System.Collections.Generic;
+using UnityEngine;
+public class Blade : MonoBehaviour
+{
+    private Rigidbody rb;
+    private SphereCollider sc;
+    private TrailRenderer tr;
+    void Start()
+    {
+        rb = GetComponent<Rigidbody>();
+        sc = GetComponent<SphereCollider>();
+        tr = GetComponent<TrailRenderer>();
+    }
+    void Update()
+    {   
+        if (Input.GetMouseButtonDown(0))
+        {
+            tr.enabled = true;
+            sc.enabled = true;
+        }
+        if (Input.GetMouseButtonUp(0))
+        {
+            tr.enabled = false;
+            sc.enabled = false;
+        }
+        BladeFollowMouse();
+    }
+    private void BladeFollowMouse()
+    {
+        Vector3 mousePos = Input.mousePosition;
+        mousePos.z = 10;
+        rb.position = Camera.main.ScreenToWorldPoint(mousePos);
+    }
+}
+
+// Fruit\BombScript.cs
+using System.Collections;
+using System.Collections.Generic;
+using UnityEngine;
+using UnityEngine.SceneManagement;
+public class BombScript : MonoBehaviour
+{
+    private float rotationForce = 200;
+    public ParticleSystem explosionParticle;
+    void Awake()
+    {
+        string currentSceneName = SceneManager.GetActiveScene().name;
+    }
+    void Start()
+    {
+        transform.rotation = Random.rotation;
+    }
+    void Update()
+    {
+        transform.Rotate(Vector2.right * Time.deltaTime * rotationForce);
+    }
+    private void OnTriggerEnter(Collider other)
+    {
+        if (other.tag == "Blade")
+        {
+            string currentSceneName = SceneManager.GetActiveScene().name;
+            Destroy(gameObject);
+            Instantiate(explosionParticle, transform.position, explosionParticle.transform.rotation);
+            if (currentSceneName == "Fruit")
+            {
+                FindObjectOfType<FruitRunGameManager>().GameOver();
+            }
+            else
+            {
+                FindObjectOfType<FruitGameManager>().GameOver();
+            }
+        }
+    }
+}
+
+// Fruit\Cursor.cs
+using System.Collections;
+using System.Collections.Generic;
+using UnityEngine;
+public class Cursor : MonoBehaviour
+{
+    private Rigidbody rb;
+    private SphereCollider sc;
+    private TrailRenderer tr;
+    void Start()
+    {
+        rb = GetComponent<Rigidbody>();
+        sc = GetComponent<SphereCollider>();
+        tr = GetComponent<TrailRenderer>();
+        InitializeCursor();
+    }
+    void Update()
+    {
+        tr.enabled = true;
+        sc.enabled = true;
+    }
+    public void InitializeCursor()
+    {
+        rb.velocity = Vector3.zero;
+        rb.angularVelocity = Vector3.zero;
+        tr.Clear();
+    }
+}
+
+// Fruit\CursorManager.cs
+using System.Collections;
+using System.Collections.Generic;
+using UnityEngine;
+public class CursorManager : MonoBehaviour
+{
+    public SocketClient socketClient;
+    public GameObject landmarkPoint;
+    void Start()
+    {
+        if (socketClient == null)
+        {
+            socketClient = FindObjectOfType<SocketClient>();
+            if (socketClient == null)
+            {
+                Debug.LogError("SocketClient is not assigned and not found in the scene.");
+                return;
+            }
+        }
+    }
+    void Update()
+    {
+        if (socketClient != null)
+        {
+            string data = socketClient.Data;
+            if (string.IsNullOrEmpty(data))
+            {
+                Debug.LogWarning("Received empty or null data from SocketClient.");
+                return;
+            }
+            Debug.Log("Received Data: " + data);
+            data = data.Replace("[", "").Replace("]", "");
+            data = data.Replace("(", "").Replace(")", "");
+            string[] points = data.Split(',');
+            float x = 20 + float.Parse(points[18])/(-10);
+            float y = 10 + -(float.Parse(points[19]) / 10);
+            landmarkPoint.transform.localPosition = new Vector3(x, y, 0);
+        }
+        else
+        {
+            Debug.LogWarning("SocketClient is null");
+        }
+    }
+}
+
+// Fruit\FruitGameManager.cs
+using System.Collections;
+using System.Collections.Generic;
+using UnityEngine;
+using UnityEngine.UI;
+public class FruitGameManager : MonoBehaviour
+{
+    int score;
+    public Text scoreText;
+    public bool gameIsOver;
+    public GameObject gameOverPanel;
+    public Text highscoreText;
+    private int highscore;
+    public Text GameOverPointText;
+    void Start()
+    {
+        gameIsOver = false;
+        score = 0;
+        highscore = PlayerPrefs.GetInt("Highscore", 0);
+        highscoreText.text = "Highscore: " + highscore;
+    }
+    public void UpdateTheScore(int scorePointsToAdd)
+    {
+        score += scorePointsToAdd;
+        scoreText.text = "Score: " + score;
+    }
+    public void GameOver()
+    {
+        gameIsOver = true;
+        GameOverPointText.text = "SCORE: " + Mathf.FloorToInt(score);
+        if (Mathf.FloorToInt(score) > highscore)
+        {
+            highscore = Mathf.FloorToInt(score);
+            PlayerPrefs.SetInt("Highscore", highscore);
+            highscoreText.text = "Highscore: " + highscore;
+        }
+        gameOverPanel.SetActive(true);
+    }
+}
+
+// Fruit\FruitRunFruits.cs
+using System.Collections;
+using System.Collections.Generic;
+using UnityEngine;
+using UnityEngine.SceneManagement;
+public class FruitRunFruits : MonoBehaviour
+{
+    private FruitRunGameManager gm;
+    public GameObject slicedFruit;
+    public GameObject fruitJuice;
+    private float rotationForce = 200;
+    private Rigidbody rb;
+    public int scorePoints;
+    void Awake()
+    {
+        string currentSceneName = SceneManager.GetActiveScene().name;
+        if (currentSceneName != "Fruit")
+        {
+            this.enabled = false;
+        }
+    }
+    void Start()
+    {
+        rb = GetComponent<Rigidbody>();
+        gm = FindObjectOfType<FruitRunGameManager>();
+    }
+    void Update()
+    {
+        transform.Rotate(Vector2.right * Time.deltaTime * rotationForce);
+    }
+    private void InstantiateSlicedFruit()
+    {
+        GameObject instantiatedFruit = Instantiate(slicedFruit, transform.position, transform.rotation);
+        GameObject instantiatedJuice = Instantiate(fruitJuice, new Vector3(transform.position.x, transform.position.y, 0), fruitJuice.transform.rotation);
+        Rigidbody[] slicedRb = instantiatedFruit.transform.GetComponentsInChildren<Rigidbody>();
+        foreach (Rigidbody srb in slicedRb)
+        {
+            srb.AddExplosionForce(130f, transform.position, 10);
+            srb.velocity = rb.velocity * 1.2f;
+        }
+        Destroy(instantiatedFruit, 4);
+        Destroy(instantiatedJuice, 4);
+    }
+    private void OnTriggerEnter(Collider other)
+    {
+        if (other.tag == "Blade")
+        {
+            gm.UpdateTheScore(scorePoints);
+            Destroy(gameObject);
+            InstantiateSlicedFruit();
+        }
+    }
+}
+
+// Fruit\FruitRunGameManager.cs
+using System.Collections;
+using System.Collections.Generic;
+using UnityEngine;
+using UnityEngine.UI;
+using UnityEngine.SceneManagement;
+public class FruitRunGameManager : MonoBehaviour
+{
+    int score;
+    public Text scoreText;
+    public bool gameIsOver;
+    public Cursor cursor;
+    public CursorManager cursorManager; 
+    void Start()
+    {
+        gameIsOver = false;
+        score = PlayerPrefs.GetInt("point", 0);
+        InitializeGame();
+    }
+    void InitializeGame()
+    {
+        Debug.Log("Initializing Game");
+        if (cursor != null)
+        {
+            cursor.InitializeCursor();
+        }
+        if (SocketClient.Instance == null)
+        {
+            Debug.LogError("SocketClient is not assigned and not found in the scene.");
+            return;
+        }
+    }
+    public void UpdateTheScore(int scorePointsToAdd)
+    {
+        score += scorePointsToAdd; 
+        scoreText.text = "Score: " + score;
+    }
+    public void GameOver()
+    {
+        gameIsOver = true;
+        PlayerPrefs.SetInt("point", score);
+        SceneManager.LoadScene("Run"); 
+    }
+}
+
+// Fruit\FruitRunSpawnObjects.cs
+using System.Collections;
+using System.Collections.Generic;
+using UnityEngine;
+public class FruitRunSpawnObjects : MonoBehaviour
+{
+    public GameObject[] objects;
+    public float left;
+    public float right;
+    void Start()
+    {
+        StartCoroutine(SpawnRandomObject());
+    }
+    private IEnumerator SpawnRandomObject()
+    {
+        yield return new WaitForSeconds(1);
+        while (FindObjectOfType<FruitRunGameManager>().gameIsOver == false)
+        {
+            InstantiateRandomObject();
+            yield return new WaitForSeconds(RandomRepeatrate());
+        }
+    }
+    private void InstantiateRandomObject()
+    {
+        int objectIndex = Random.Range(0, objects.Length);
+        GameObject obj = Instantiate(objects[objectIndex], transform.position, objects[objectIndex].transform.rotation);
+        obj.GetComponent<Rigidbody>().AddForce(RandomVector() * RandomForce(), ForceMode.Impulse);
+        obj.transform.rotation = Random.rotation;
+    }
+    private float RandomForce()
+    {
+        float force = Random.Range(14f, 17f);
+        return force;
+    }
+    private float RandomRepeatrate()
+    {
+        float repeatrate = Random.Range(0.5f, 3f);
+        return repeatrate;
+    }
+    private Vector2 RandomVector()
+    {
+        Vector2 moveDirection = new Vector2(Random.Range(left, right), 1).normalized;
+        return moveDirection;
+    }
+}
+
+// Fruit\Fruits.cs
+using System.Collections;
+using System.Collections.Generic;
+using UnityEngine;
+using UnityEngine.SceneManagement;
+public class Fruits : MonoBehaviour
+{
+    private FruitGameManager gm;
+    public GameObject slicedFruit;
+    public GameObject fruitJuice;
+    private float rotationForce = 200;
+    private Rigidbody rb;
+    public int scorePoints;
+    void Awake()
+    {
+        string currentSceneName = SceneManager.GetActiveScene().name;
+        if (currentSceneName != "FruitOnly")
+        {
+            this.enabled = false;
+        }
+    }
+    void Start()
+    {
+        rb = GetComponent<Rigidbody>();
+        gm = FindObjectOfType<FruitGameManager>();
+    }
+    void Update()
+    {
+        transform.Rotate(Vector2.right * Time.deltaTime * rotationForce);
+    }
+    private void InstantiateSlicedFruit()
+    {
+        GameObject instantiatedFruit = Instantiate(slicedFruit, transform.position, transform.rotation);
+        GameObject instantiatedJuice = Instantiate(fruitJuice, new Vector3(transform.position.x, transform.position.y, 0), fruitJuice.transform.rotation);
+        Rigidbody[] slicedRb = instantiatedFruit.transform.GetComponentsInChildren<Rigidbody>();
+        foreach (Rigidbody srb in slicedRb)
+        {
+            srb.AddExplosionForce(130f, transform.position, 10);
+            srb.velocity = rb.velocity * 1.2f;
+        }
+        Destroy(instantiatedFruit, 4);
+        Destroy(instantiatedJuice, 4);
+    }
+    private void OnTriggerEnter(Collider other)
+    {
+        string currentSceneName = SceneManager.GetActiveScene().name;
+        if (currentSceneName == "FruitOnly")
+        {
+            if (other.tag == "Blade")
+            {
+                gm.UpdateTheScore(scorePoints);
+                Destroy(gameObject);
+                InstantiateSlicedFruit();
+            }
+        }
+    }
+}
+
+// Fruit\SpawnObjects.cs
+using System.Collections;
+using System.Collections.Generic;
+using UnityEngine;
+public class SpawnObjects : MonoBehaviour
+{
+    public GameObject[] objects;
+    public float left;
+    public float right;
+    void Start()
+    {
+        StartCoroutine(SpawnRandomObject());
+    }
+    private IEnumerator SpawnRandomObject()
+    {
+        yield return new WaitForSeconds(1);
+        while (FindObjectOfType<FruitGameManager>().gameIsOver == false || FindObjectOfType<FruitRunGameManager>().gameIsOver == false)
+        {
+            InstantiateRandomObject();
+            yield return new WaitForSeconds(RandomRepeatrate());
+        }
+    }
+    private void InstantiateRandomObject()
+    {
+        int objectIndex = Random.Range(0, objects.Length);
+        GameObject obj = Instantiate(objects[objectIndex], transform.position, objects[objectIndex].transform.rotation);
+        obj.GetComponent<Rigidbody>().AddForce(RandomVector() * RandomForce(), ForceMode.Impulse);
+        obj.transform.rotation = Random.rotation;
+    }
+    private float RandomForce()
+    {
+        float force = Random.Range(14f, 17f);
+        return force;
+    }
+    private float RandomRepeatrate()
+    {
+        float repeatrate = Random.Range(0.5f, 3f);
+        return repeatrate;
+    }
+    private Vector2 RandomVector()
+    {
+        Vector2 moveDirection = new Vector2(Random.Range(left, right), 1).normalized;
+        return moveDirection;
+    }
+}
+
+// Hole\HoleFloorManager.cs
+using System.Collections;
+using System.Collections.Generic;
+using UnityEngine;
+public class HoleFloorManager : MonoBehaviour
+{
+    public GameObject[] hallwayPrefabs;
+    public GameObject[] shortFloorPrefabs;
+    public GameObject[] longFloorPrefabs;
+    public GameObject[] startPrefabs;
+    private List<GameObject> activeFloors = new List<GameObject>();
+    public float zSpawn = 0;
+    public float hallwayLength = 74;
+    public float shortFloorLength = 97;
+    public float longFloorLength = 105;
+    public int numberOfHallways = 5;
+    void Start()
+    {
+        SpawnStartFloor();
+        for (int i = 0; i < numberOfHallways; i++)
+        {
+            SpawnFloor(hallwayPrefabs, hallwayLength);
+        }
+    }
+    private void SpawnStartFloor()
+    {
+        int floorIndex = Random.Range(0, startPrefabs.Length);
+        GameObject go = Instantiate(startPrefabs[floorIndex], new Vector3(0, 0, zSpawn), transform.rotation);
+        activeFloors.Add(go);
+        zSpawn += IsShortFloor(go) ? shortFloorLength : longFloorLength;
+    }
+    private void SpawnFloor(GameObject[] floorPrefabs, float floorLength)
+    {
+        int floorIndex = Random.Range(0, floorPrefabs.Length);
+        GameObject go = Instantiate(floorPrefabs[floorIndex], new Vector3(0, 0, zSpawn), transform.rotation);
+        activeFloors.Add(go);
+        zSpawn += floorLength;
+    }
+    private bool IsShortFloor(GameObject floor)
+    {
+        return new List<GameObject>(shortFloorPrefabs).Contains(floor);
+    }
+}
+
+// Hole\HolePortal.cs
+﻿using UnityEngine;
+using UnityEngine.SceneManagement; // Bắt buộc phải có thư viện này để chuyển cảnh
+public class HolePortal : MonoBehaviour
+{
+    [Header("Cấu hình xoay")]
+    public float rotationSpeed = 20f;
+    void Update()
+    {
+        transform.Rotate(0, rotationSpeed * Time.deltaTime, 0);
+    }
+    private void OnTriggerEnter(Collider other)
+    {
+        if (other.CompareTag("Player"))
+        {
+            int currentPoint = Mathf.FloorToInt(PlayerManager.point);
+            PlayerPrefs.SetInt("LastScore", currentPoint);
+            SceneManager.LoadScene("Hole");
+            Debug.Log("Đang chuyển sang màn chơi Hole...");
+        }
+    }
+}
+
+// Hole\HoleTileManager.cs
+using System.Collections;
+using System.Collections.Generic;
+using UnityEngine;
+public class HoleTileManager : MonoBehaviour
+{
+    public GameObject[] tilePrefabs;
+    public GameObject[] startPrefabs;
+    private List<GameObject> activeTiles = new List<GameObject>();
+    public float zSpawn = 15;
+    public float tileLength = 35;
+    public int numberOfTiles = 5;
+    void Start()
+    {
+        SpawnStartTile();
+        for (int i = 0; i < numberOfTiles; i++)
+        {
+            SpawnTile(Random.Range(0, tilePrefabs.Length));
+        }
+    }
+    public void SpawnTile(int tileIndex)
+    {
+        GameObject go = Instantiate(tilePrefabs[tileIndex], transform.forward * zSpawn, transform.rotation);
+        activeTiles.Add(go);
+        zSpawn += tileLength;
+    }
+    public void SpawnStartTile()
+    {
+        int tileIndex = Random.Range(0, startPrefabs.Length);
+        GameObject go = Instantiate(startPrefabs[tileIndex], transform.forward * zSpawn, transform.rotation);
+        activeTiles.Add(go);
+        zSpawn += tileLength;
+    }
+}
+
+// Hole\LineCode.cs
+using System.Collections;
+using System.Collections.Generic;
+using UnityEngine;
+public class LineCode : MonoBehaviour
+{
+    LineRenderer lineRenderer;
+    public Transform origin;
+    public Transform destination;
+    void Start()
+    {
+        lineRenderer = GetComponent<LineRenderer>();
+        lineRenderer.startWidth = 0.1f;
+        lineRenderer.endWidth = 0.1f;
+    }
+    void Update()
+    {
+        lineRenderer.SetPosition(0, origin.position);
+        lineRenderer.SetPosition(1, destination.position);
+    }
+}
+
+// Hole\PoseTracking.cs
+using System.Collections;
+using System.Collections.Generic;
+using UnityEngine;
+using System.Globalization;
+public class HandTracking : MonoBehaviour
+{
+    public SocketClient socketClient;
+    public GameObject[] landmarkPoints;
+    void Start()
+    {
+        if (socketClient == null)
+        {
+            socketClient = FindObjectOfType<SocketClient>();
+            if (socketClient == null)
+            {
+                Debug.LogError("SocketClient is not assigned and not found in the scene.");
+                return;
+            }
+        }
+    }
+    void Update()
+    {
+        if (socketClient == null) return;
+        string data = socketClient.Data;
+        if (string.IsNullOrEmpty(data))
+        {
+            return;
+        }
+        try
+        {
+            data = data.Replace("[", "").Replace("]", "");
+            data = data.Replace("(", "").Replace(")", "");
+            data = data.Replace(" ", "");
+            string[] points = data.Split(',');
+            if (points.Length < 18)
+            {
+                return;
+            }
+            for (int i = 0; i < 9; i++)
+            {
+                if (!float.TryParse(points[i * 2], NumberStyles.Any, CultureInfo.InvariantCulture, out float xRaw) ||
+                    !float.TryParse(points[i * 2 + 1], NumberStyles.Any, CultureInfo.InvariantCulture, out float yRaw))
+                {
+                    continue; // Skip this point if parsing fails
+                }
+                float x = 2.5f + xRaw / (-90);
+                float y = 3.5f + -(yRaw / 100);
+                landmarkPoints[i].transform.localPosition = new Vector3(x, y, 30);
+                if (i == 1)
+                {
+                    landmarkPoints[9].transform.localPosition = new Vector3(x, y - 0.7f, 30);
+                    landmarkPoints[10].transform.localPosition = new Vector3(x, y - 1.5f, 30);
+                }
+                if (i == 0)
+                {
+                    landmarkPoints[11].transform.localPosition = new Vector3(x, y - 0.7f, 30);
+                    landmarkPoints[12].transform.localPosition = new Vector3(x, y - 1.5f, 30);
+                }
+            }
+        }
+        catch (System.Exception e)
+        {
+            Debug.LogWarning($"Error parsing hand tracking data: {e.Message}");
+        }
+    }
+}
+
+// Hole\Wall.cs
+using UnityEngine;
+using UnityEngine.SceneManagement;
+public class Wall : MonoBehaviour
+{
+    private float speed;
+    private Vector3 targetPosition = new Vector3(0, 0, -10);
+    public void SetSpeed(float newSpeed)
+    {
+        speed = newSpeed;
+    }
+    void Update()
+    {
+        transform.position = Vector3.MoveTowards(transform.position, targetPosition, speed * Time.deltaTime);
+        if (transform.position == targetPosition)
+        {
+            Destroy(gameObject);
+        }
+    }
+    private void OnTriggerEnter(Collider other)
+    {
+        if (other.CompareTag("Player"))
+        {
+            PlayerManager.gameOver = true;
+            Debug.Log("Player hit wall - Game Over!");
+            SceneManager.LoadScene("Run");
+        }
+    }
+}
+
+// Hole\WallSpawner.cs
+using UnityEngine;
+using System.Collections;
+public class WallSpawner : MonoBehaviour
+{
+    public GameObject[] wallPrefabs; // Array of wall prefabs
+    public float initialSpeed = 5f; // Initial speed of the walls
+    public float speedIncreaseRate = 0.5f; // Rate at which the speed increases
+    public float maxSpeed = 15f; // Maximum speed of the walls
+    public float initialSpawnInterval = 20f; // Initial time between wall spawns
+    public float spawnIntervalDecreaseRate = 0.5f; // Rate at which the spawn interval decreases
+    public float minSpawnInterval = 10f; // Minimum time between wall spawns
+    private float currentSpeed;
+    private float currentSpawnInterval;
+    void Start()
+    {
+        currentSpeed = initialSpeed;
+        currentSpawnInterval = initialSpawnInterval;
+        StartCoroutine(SpawnWalls());
+    }
+    IEnumerator SpawnWalls()
+    {
+        while (true)
+        {
+            SpawnWall();
+            yield return new WaitForSeconds(currentSpawnInterval);
+            currentSpeed = Mathf.Min(maxSpeed, currentSpeed + speedIncreaseRate);
+            currentSpawnInterval = Mathf.Max(minSpawnInterval, currentSpawnInterval - spawnIntervalDecreaseRate);
+        }
+    }
+    void SpawnWall()
+    {
+        int randomIndex = Random.Range(0, wallPrefabs.Length);
+        GameObject wall = Instantiate(wallPrefabs[randomIndex], new Vector3(0, 0, 70), Quaternion.identity);
+        wall.GetComponent<Wall>().SetSpeed(currentSpeed);
+    }
+}
+
+// Menu&Shop\MainMenuManager.cs
+using UnityEngine;
+public class MainMenuManager : MonoBehaviour
+{
+    public GameObject mainCanvas;
+    public GameObject modeCanvas;
+    public CursorController cursorController; // Add reference to CursorController
+    void Start()
+    {
+        mainCanvas.SetActive(true);
+        modeCanvas.SetActive(false);
+        cursorController.SetCursorCanvas(mainCanvas.GetComponent<Canvas>()); // Notify CursorController
+    }
+    public void ShowModeCanvas()
+    {
+        mainCanvas.SetActive(false);
+        modeCanvas.SetActive(true);
+        cursorController.SetCursorCanvas(modeCanvas.GetComponent<Canvas>()); // Notify CursorController
+    }
+    public void ShowMainCanvas()
+    {
+        mainCanvas.SetActive(true);
+        modeCanvas.SetActive(false);
+        cursorController.SetCursorCanvas(mainCanvas.GetComponent<Canvas>()); // Notify CursorController
+    }
+}
+
+// Menu&Shop\MainMenuPlayerController.cs
+using System.Collections;
+using System.Collections.Generic;
+using UnityEngine;
+public class MainMenuPlayerController : MonoBehaviour
+{
+    private CharacterController controller;
+    private Vector3 direction;
+    public float forwardSpeed;
+    public float Gravity = -20;
+    public Animator animator;
+    void Start()
+    {
+        controller = GetComponent<CharacterController>();
+        if (controller == null)
+        {
+            Debug.LogError("CharacterController component not found on the GameObject. Please add a CharacterController component.");
+            enabled = false; // Disable the script if CharacterController is not found
+            return;
+        }
+        Time.timeScale = 1.2f;
+    }
+    private void FixedUpdate()
+    {
+        if (controller == null)
+        {
+            return;
+        }
+        controller.Move(direction * Time.fixedDeltaTime);
+    }
+    void Update()
+    {
+        if (controller == null)
+        {
+            return;
+        }
+        animator.SetBool("isGameStarted", true);
+        animator.SetBool("isGrounded", true);
+        direction.z = forwardSpeed;
+        if (controller.isGrounded)
+        {
+            direction.y = 0;
+        }
+        else
+        {
+            direction.y += Gravity * Time.deltaTime;
+        }
+    }
+}
+
+// Menu&Shop\MainMenuTilesManager.cs
+using System.Collections;
+using System.Collections.Generic;
+using UnityEngine;
+public class MainMenuTileManager : MonoBehaviour
+{
+    public GameObject tilePrefab;
+    private List<GameObject> activeTiles = new List<GameObject>();
+    public float zSpawn = 15;
+    public float tileLength = 35;
+    public int numberOfTiles = 5;
+    public Transform playerTransform;
+    void Start()
+    {
+        for (int i = 0; i < numberOfTiles; i++)
+        {
+            SpawnTile();
+        }
+    }
+    void Update()
+    {
+        if (playerTransform.position.z - 65 > zSpawn - (numberOfTiles * tileLength))
+        {
+            SpawnTile();
+            DeleteTile();
+        }
+    }
+    public void SpawnTile()
+    {
+        GameObject go = Instantiate(tilePrefab, transform.forward * zSpawn, transform.rotation);
+        activeTiles.Add(go);
+        zSpawn += tileLength;
+    }
+    private void DeleteTile()
+    {
+        Destroy(activeTiles[0]);
+        activeTiles.RemoveAt(0);
+    }
+}
+
+// Menu&Shop\RotateModel.cs
+using UnityEngine;
+public class RotateModel : MonoBehaviour
+{
+    public float rotationSpeed = 5f;
+    void Update()
+    {
+        Debug.Log("RotateModel script is running");
+        transform.Rotate(Vector3.up, rotationSpeed * Time.deltaTime);
+    }
+}
+
+// Menu&Shop\ShopManager.cs
+using UnityEngine;
+public class ShopManager : MonoBehaviour
+{
+    public GameObject shopCanvas;
+    public GameObject modelCanvas;
+    public GameObject bladeCanvas;
+    void Start()
+    {
+        shopCanvas.SetActive(true);
+        modelCanvas.SetActive(false);
+        bladeCanvas.SetActive(false);
+    }
+    public void ShowModelCanvas()
+    {
+        shopCanvas.SetActive(false);
+        modelCanvas.SetActive(true);
+        bladeCanvas.SetActive(false);
+    }
+    public void ShowBladeCanvas()
+    {
+        shopCanvas.SetActive(false);
+        modelCanvas.SetActive(false);
+        bladeCanvas.SetActive(true);
+    }
+    public void ShowShopCanvas()
+    {
+        shopCanvas.SetActive(true);
+        modelCanvas.SetActive(false);
+        bladeCanvas.SetActive(false);
+    }
+}
+
+// Python-Mediapipe\main.py
+from app.main import run
+if __name__ == "__main__":
+    run()
+
+// Python-Mediapipe\app\config.py
+HOST = "127.0.0.1"
+PORT = 5052
+threshold_clap = (
+    0.05  # Euclidean distance threshold (reduced from 0.08 for stricter detection)
+)
+threshold_horizontal = 0
+threshold_vertical = -0.2
+clap_confirm_frames = 3  # Số frame liên tiếp cần xác nhận trước khi trigger clap
+clap_cooldown_frames = 30  # Cooldown sau khi clap (~1 giây ở 30fps)
+selected_landmarks = [0, 16, 14, 12, 11, 13, 15, 24, 23]
+
+// Python-Mediapipe\app\detection.py
+import cv2
+import math
+import mediapipe as mp
+from .config import (
+    threshold_clap,
+    threshold_horizontal,
+    threshold_vertical,
+    selected_landmarks,
+    clap_confirm_frames,
+    clap_cooldown_frames,
+)
+mp_hands = mp.solutions.hands
+class DetectionState:
+    """Class to hold detection state variables."""
+    def __init__(self):
+        self.bool_locked = False
+        self.prev_frame_width = 0
+        self.prev_frame_height = 0
+        self.left_fixed = 0
+        self.right_fixed = 0
+        self.upper_fixed = 0
+        self.lower_fixed = 0
+        self.prev_hand_x = 0
+        self.prev_hand_y = 0
+        self.clap_cooldown = 0  # Cooldown để tránh cập nhật liên tục khi clap
+        self.clap_confirm_count = 0  # Đếm số frame liên tiếp thỏa mãn điều kiện clap
+        self.left_hand_pos = None  # (x, y) của tay trái từ Hand detection
+        self.right_hand_pos = None  # (x, y) của tay phải từ Hand detection
+def detection(image, pose, hands, conn, state):
+    """
+    Process image for pose and hand detection.
+    Args:
+        image: Input image frame
+        pose: MediaPipe Pose instance
+        hands: MediaPipe Hands instance
+        conn: Socket connection to Unity
+        state: DetectionState instance
+    Returns:
+        Processed image with annotations
+    """
+    height, width, _ = image.shape
+    image_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+    fullbody_output = "[]"
+    hand_output = "(0, 0)"
+    pose_output = "()"
+    move = 0
+    pose_results = pose.process(image_rgb)
+    if pose_results.pose_landmarks:
+        center_x = int(
+            (
+                pose_results.pose_landmarks.landmark[11].x
+                + pose_results.pose_landmarks.landmark[12].x
+                + pose_results.pose_landmarks.landmark[23].x
+                + pose_results.pose_landmarks.landmark[24].x
+            )
+            / 4
+            * width
+        )
+        center_y = int(
+            (
+                pose_results.pose_landmarks.landmark[11].y
+                + pose_results.pose_landmarks.landmark[12].y
+                + pose_results.pose_landmarks.landmark[23].y
+                + pose_results.pose_landmarks.landmark[24].y
+            )
+            / 4
+            * height
+        )
+        cv2.circle(
+            image, (center_x, center_y), radius=10, color=(0, 0, 255), thickness=-1
+        )
+        if state.prev_frame_width == 0 and state.prev_frame_height == 0:
+            state.prev_frame_width = center_x
+            state.prev_frame_height = center_y
+        if not state.bool_locked:
+            left = int(pose_results.pose_landmarks.landmark[11].x * width)
+            right = int(pose_results.pose_landmarks.landmark[12].x * width)
+            state.left_fixed = int(left + (left - right) * threshold_horizontal)
+            state.right_fixed = int(right - (left - right) * threshold_horizontal)
+            upper = int(pose_results.pose_landmarks.landmark[12].y * height)
+            lower = int(pose_results.pose_landmarks.landmark[24].y * height)
+            state.upper_fixed = int(upper - (lower - upper) * threshold_vertical)
+            state.lower_fixed = int(lower + (lower - upper) * threshold_vertical)
+        left_wrist_x = pose_results.pose_landmarks.landmark[19].x
+        left_wrist_y = pose_results.pose_landmarks.landmark[19].y
+        right_wrist_x = pose_results.pose_landmarks.landmark[20].x
+        right_wrist_y = pose_results.pose_landmarks.landmark[20].y
+        dx = left_wrist_x - right_wrist_x
+        dy = left_wrist_y - right_wrist_y
+        euclidean_distance = math.sqrt(dx * dx + dy * dy)
+        if state.clap_cooldown > 0:
+            state.clap_cooldown -= 1
+        clap_detected = euclidean_distance < threshold_clap
+        if clap_detected and state.clap_cooldown == 0:
+            state.clap_confirm_count += 1
+            if state.clap_confirm_count >= clap_confirm_frames:
+                left = int(pose_results.pose_landmarks.landmark[11].x * width)
+                right = int(pose_results.pose_landmarks.landmark[12].x * width)
+                state.left_fixed = int(left + (left - right) * threshold_horizontal)
+                state.right_fixed = int(right - (left - right) * threshold_horizontal)
+                upper = int(pose_results.pose_landmarks.landmark[12].y * height)
+                lower = int(pose_results.pose_landmarks.landmark[24].y * height)
+                state.upper_fixed = int(upper - (lower - upper) * threshold_vertical)
+                state.lower_fixed = int(lower + (lower - upper) * threshold_vertical)
+                state.bool_locked = True
+                state.clap_cooldown = clap_cooldown_frames  # Cooldown từ config
+                state.clap_confirm_count = 0  # Reset confirm count
+                state.prev_frame_width = center_x
+                state.prev_frame_height = center_y
+                print(f"locked - position reset (distance: {euclidean_distance:.4f})")
+                move = 5
+        else:
+            state.clap_confirm_count = 0
+        if state.bool_locked:
+            cv2.rectangle(
+                image,
+                (state.left_fixed, state.upper_fixed),
+                (state.right_fixed, state.lower_fixed),
+                (255, 0, 0),
+                2,
+            )
+            if (
+                center_x <= state.right_fixed
+                and state.prev_frame_width > state.right_fixed
+            ):
+                print("right")
+                move = 1
+            if (
+                center_x >= state.left_fixed
+                and state.prev_frame_width < state.left_fixed
+            ):
+                print("left")
+                move = 2
+            if (
+                center_x > state.right_fixed
+                and state.prev_frame_width <= state.right_fixed
+            ):
+                print("left")
+                move = 2
+            if (
+                center_x < state.left_fixed
+                and state.prev_frame_width >= state.left_fixed
+            ):
+                print("right")
+                move = 1
+            if (
+                center_y <= state.upper_fixed
+                and state.prev_frame_height > state.upper_fixed
+            ):
+                print("jump")
+                move = 3
+            if (
+                center_y >= state.lower_fixed
+                and state.prev_frame_height < state.lower_fixed
+            ):
+                print("crouch")
+                move = 4
+        state.prev_frame_width = center_x
+        state.prev_frame_height = center_y
+        pose_output = f"({center_x}, {center_y}), {move}"
+    hand_results = hands.process(image_rgb)
+    if hand_results.multi_hand_landmarks:
+        for idx, hand_landmarks in enumerate(hand_results.multi_hand_landmarks):
+            handedness = hand_results.multi_handedness[idx].classification[0].label
+            if handedness != "Right":
+                continue  # Bỏ qua nếu không phải tay phải
+            hand_center_x = int(
+                (
+                    hand_landmarks.landmark[mp_hands.HandLandmark.INDEX_FINGER_MCP].x
+                    + hand_landmarks.landmark[mp_hands.HandLandmark.PINKY_MCP].x
+                    + hand_landmarks.landmark[mp_hands.HandLandmark.WRIST].x
+                )
+                / 3
+                * width
+            )
+            hand_center_y = int(
+                (
+                    hand_landmarks.landmark[mp_hands.HandLandmark.INDEX_FINGER_MCP].y
+                    + hand_landmarks.landmark[mp_hands.HandLandmark.PINKY_MCP].y
+                    + hand_landmarks.landmark[mp_hands.HandLandmark.WRIST].y
+                )
+                / 3
+                * height
+            )
+            cv2.circle(
+                image,
+                (hand_center_x, hand_center_y),
+                radius=10,
+                color=(0, 0, 255),
+                thickness=-1,
+            )  # Red dot for right hand only
+            hand_output = f"({hand_center_x}, {hand_center_y})"
+            state.prev_hand_x, state.prev_hand_y = hand_center_x, hand_center_y
+            break
+    else:
+        hand_output = f"({state.prev_hand_x}, {state.prev_hand_y})"
+    if pose_results.pose_landmarks:
+        landmarks = []
+        for idx in sorted(selected_landmarks, reverse=True):
+            landmark = pose_results.pose_landmarks.landmark[idx]
+            x = int(landmark.x * width)
+            y = int(landmark.y * height)
+            landmarks.append([x, y])
+            cv2.circle(image, (x, y), radius=5, color=(0, 255, 0), thickness=-1)
+        fullbody_output = f"{landmarks}"
+    combined_output = f"{fullbody_output}, {hand_output}, {pose_output}"
+    conn.sendall(f"{fullbody_output}, {hand_output}, {pose_output}".encode())
+    print(combined_output)
+    return image
+
+// Python-Mediapipe\app\main.py
+import cv2
+import mediapipe as mp
+import socket
+from .config import HOST, PORT
+from .window_manager import setup_window
+from .detection import detection, DetectionState
+mp_pose = mp.solutions.pose
+mp_hands = mp.solutions.hands
+def run():
+    """Main entry point for the MediaPipe application."""
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        s.bind((HOST, PORT))
+        s.listen()
+        fixed_width, fixed_height = setup_window()
+        cap = cv2.VideoCapture(0)
+        with mp_pose.Pose(
+            min_detection_confidence=0.5, min_tracking_confidence=0.5
+        ) as pose, mp_hands.Hands(
+            min_detection_confidence=0.5, min_tracking_confidence=0.5
+        ) as hands:
+            while True:  # Vòng lặp chính để chờ kết nối
+                print(f"\n[MediaPipe] Server started on {HOST}:{PORT}")
+                print(
+                    "[MediaPipe] Waiting for Unity to connect... (Start Unity game now!)"
+                )
+                conn, addr = s.accept()
+                print(f"[MediaPipe] Connected by {addr}")
+                state = DetectionState()
+                try:
+                    while cap.isOpened():
+                        success, image = cap.read()
+                        if not success:
+                            print("Ignoring empty camera frame.")
+                            break
+                        image = cv2.resize(
+                            image,
+                            (fixed_width, fixed_height),
+                            interpolation=cv2.INTER_LINEAR,
+                        )
+                        image = detection(image, pose, hands, conn, state)
+                        image = cv2.flip(image, 1)
+                        cv2.imshow("MediaPipe Pose", image)
+                        if cv2.waitKey(1) & 0xFF == ord("q"):
+                            cap.release()
+                            cv2.destroyAllWindows()
+                            return  # Thoát hoàn toàn khi nhấn 'q'
+                except (
+                    ConnectionResetError,
+                    ConnectionAbortedError,
+                    BrokenPipeError,
+                ) as e:
+                    print(f"\n[MediaPipe] Unity disconnected: {e}")
+                    print("[MediaPipe] Returning to waiting mode...")
+                    conn.close()
+                    continue  # Quay lại chờ kết nối mới
+        cap.release()
+        cv2.destroyAllWindows()
+if __name__ == "__main__":
+    run()
+
+// Python-Mediapipe\app\window_manager.py
+import cv2
+import ctypes
+def setup_window():
+    """Setup OpenCV window with custom properties."""
+    user32 = ctypes.windll.user32
+    screen_width = user32.GetSystemMetrics(0)
+    screen_height = user32.GetSystemMetrics(1)
+    fixed_width = screen_width // 4
+    fixed_height = screen_height // 4
+    window_x = 0
+    window_y = 0
+    cv2.namedWindow("MediaPipe Pose", cv2.WINDOW_NORMAL)
+    cv2.moveWindow("MediaPipe Pose", window_x, window_y)
+    cv2.resizeWindow("MediaPipe Pose", fixed_width, fixed_height)
+    cv2.setWindowProperty("MediaPipe Pose", cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_NORMAL)
+    cv2.setWindowProperty("MediaPipe Pose", cv2.WND_PROP_TOPMOST, 1)
+    hwnd = ctypes.windll.user32.FindWindowW(None, "MediaPipe Pose")
+    ctypes.windll.user32.SetWindowLongW(
+        hwnd, -16, ctypes.windll.user32.GetWindowLongW(hwnd, -16) & ~0x00800000
+    )
+    ctypes.windll.user32.SetWindowLongW(
+        hwnd, -20, ctypes.windll.user32.GetWindowLongW(hwnd, -20) | 0x80000 | 0x20
+    )
+    opacity = 255
+    ctypes.windll.user32.SetLayeredWindowAttributes(hwnd, 0, opacity, 0x2)
+    return fixed_width, fixed_height
+
+// Python-Mediapipe\app\__init__.py
+
+// Run\CameraController.cs
+using System.Collections;
+using System.Collections.Generic;
+using UnityEngine;
+public class CameraController : MonoBehaviour
+{
+    public Transform target;
+    private Vector3 offset;
+    void Start()
+    {
+        offset = transform.position - target.position;
+    }
+    void LateUpdate()
+    {
+        Vector3 newPosition = new Vector3(transform.position.x, transform.position.y, offset.z + target.position.z);
+        transform.position = Vector3.Lerp(transform.position, newPosition, 10 * Time.fixedDeltaTime);
+    }
+}
+
+// Run\Coin.cs
+using System.Collections;
+using System.Collections.Generic;
+using UnityEngine;
+public class Coin : MonoBehaviour
+{
+    void Start()
+    {
+    }
+    void Update()
+    {
+        transform.Rotate(0, 20 * Time.deltaTime, 0);
+    }
+    private void OnTriggerEnter(Collider other) 
+    {
+        if (other.tag == "Player")
+        {
+            PlayerManager.numberOfCoins += 1;
+            Destroy(gameObject);
+        }
+    }
+}
+
+// Run\FloorManager.cs
+﻿using System.Collections;
+using System.Collections.Generic;
+using UnityEngine;
+[System.Serializable]
+public class MiniGameData
+{
+    public string gameName;              // Tên để bạn dễ phân biệt (Fruit, Hole...)
+    public GameObject prefab;            // Kéo file Prefab Portal vào đây
+    public float nextSpawnZ = 500f;      // Mốc quãng đường đầu tiên sẽ xuất hiện
+    public float minRandomDist = 0f;     // Khoảng cách ngẫu nhiên thêm vào (tối thiểu)
+    public float maxRandomDist = 100f;   // Khoảng cách ngẫu nhiên thêm vào (tối đa)
+    public float distanceBetweenSpawns = 500f; // Khoảng cách giãn cách sau mỗi lần ăn
+    public float[] lanes = { -3f, 0f, 3f };    // Các làn đường mà game này có thể xuất hiện
+}
+public class FloorManager : MonoBehaviour
+{
+    [Header("Floor Prefabs")]
+    public GameObject[] hallwayPrefabs;
+    public GameObject[] shortFloorPrefabs;
+    public GameObject[] longFloorPrefabs;
+    public GameObject[] startPrefabs;
+    [Header("Mini Games Settings")]
+    public MiniGameData fruitGame; // Thông số cho game Fruit
+    public MiniGameData holeGame;  // Thông số cho game Hole
+    [Header("General Settings")]
+    public Transform playerTransform;
+    public int numberOfFloors = 5;
+    public float hallwayLength = 74f;
+    public float shortFloorLength = 74f;
+    public float longFloorLength = 105f;
+    private List<GameObject> activeFloors = new List<GameObject>();
+    private float zSpawn = 0;
+    private bool spawnHallways = false;
+    void Start()
+    {
+        fruitGame.nextSpawnZ += Random.Range(fruitGame.minRandomDist, fruitGame.maxRandomDist);
+        holeGame.nextSpawnZ += Random.Range(holeGame.minRandomDist, holeGame.maxRandomDist);
+        for (int i = 0; i < numberOfFloors; i++)
+        {
+            if (i == 0) StartFloor(Random.Range(0, startPrefabs.Length));
+            else if (spawnHallways) SpawnRandomHallways();
+            else SpawnInitialFloor();
+        }
+    }
+    void Update()
+    {
+        if (playerTransform.position.z > zSpawn - (numberOfFloors * shortFloorLength))
+        {
+            if (spawnHallways) SpawnRandomHallways();
+            else SpawnInitialFloor();
+            DeleteFloors();
+        }
+    }
+    private void CheckAndSpawnMiniGame(MiniGameData game, float currentZ, float floorLength)
+    {
+        if (game.prefab == null) return;
+        if (game.nextSpawnZ >= currentZ && game.nextSpawnZ < currentZ + floorLength)
+        {
+            float randomX = game.lanes[Random.Range(0, game.lanes.Length)];
+            Vector3 spawnPos = new Vector3(randomX, 1.5f, game.nextSpawnZ);
+            GameObject miniGameObj = Instantiate(game.prefab, spawnPos, Quaternion.identity);
+            miniGameObj.transform.parent = activeFloors[activeFloors.Count - 1].transform;
+            game.nextSpawnZ += game.distanceBetweenSpawns + Random.Range(game.minRandomDist, game.maxRandomDist);
+            Debug.Log("<color=green>Spawned " + game.gameName + "</color> at Z: " + spawnPos.z);
+        }
+    }
+    private void SpawnFloor(GameObject[] floorPrefabs, float floorLength)
+    {
+        int floorIndex = Random.Range(0, floorPrefabs.Length);
+        GameObject go = Instantiate(floorPrefabs[floorIndex], new Vector3(0, 0, zSpawn), Quaternion.identity);
+        activeFloors.Add(go);
+        CheckAndSpawnMiniGame(fruitGame, zSpawn, floorLength);
+        CheckAndSpawnMiniGame(holeGame, zSpawn, floorLength);
+        zSpawn += floorLength;
+    }
+    private void StartFloor(int floorIndex)
+    {
+        GameObject go = Instantiate(startPrefabs[floorIndex], new Vector3(0, 0, zSpawn), Quaternion.identity);
+        activeFloors.Add(go);
+        float currentLength = go.name.Contains("Short") ? shortFloorLength : longFloorLength;
+        CheckAndSpawnMiniGame(fruitGame, zSpawn, currentLength);
+        CheckAndSpawnMiniGame(holeGame, zSpawn, currentLength);
+        zSpawn += currentLength;
+    }
+    private void SpawnInitialFloor()
+    {
+        if (Random.value > 0.5f) SpawnFloor(shortFloorPrefabs, shortFloorLength);
+        else SpawnFloor(longFloorPrefabs, longFloorLength);
+        spawnHallways = true;
+    }
+    private void SpawnRandomHallways()
+    {
+        int hallwayCount = Random.Range(2, 6);
+        for (int i = 0; i < hallwayCount; i++) SpawnFloor(hallwayPrefabs, hallwayLength);
+        spawnHallways = false;
+    }
+    private void DeleteFloors()
+    {
+        float playerZ = playerTransform.position.z;
+        int floorsToDelete = 0;
+        for (int i = 0; i < activeFloors.Count; i++)
+        {
+            if (activeFloors[i].transform.position.z < playerZ - 100f) floorsToDelete++;
+            else break;
+        }
+        for (int i = 0; i < floorsToDelete; i++)
+        {
+            Destroy(activeFloors[0]);
+            activeFloors.RemoveAt(0);
+        }
+    }
+}
+
+// Run\FruitPortal.cs
+﻿using UnityEngine;
+using UnityEngine.SceneManagement; // Bắt buộc phải có thư viện này để chuyển cảnh
+public class FruitPortal : MonoBehaviour
+{
+    [Header("Cấu hình xoay")]
+    public float rotationSpeed = 20f;
+    void Update()
+    {
+        transform.Rotate(0, rotationSpeed * Time.deltaTime, 0);
+    }
+    private void OnTriggerEnter(Collider other)
+    {
+        if (other.CompareTag("Player"))
+        {
+            int currentPoint = Mathf.FloorToInt(PlayerManager.point);
+            PlayerPrefs.SetInt("LastScore", currentPoint);
+            SceneManager.LoadScene("Fruit");
+            Debug.Log("Đang chuyển sang màn chơi Fruit...");
+        }
+    }
+}
+
+// Run\PlayerController.cs
+﻿using System.Collections;
+using System.Collections.Generic;
+using UnityEngine;
+using UnityEngine.SceneManagement;
+public class PlayerController : MonoBehaviour
+{
+    private CharacterController controller;
+    private Vector3 direction;
+    public float forwardSpeed;
+    public float maxSpeed;
+    private int desiredLane = 1; // 0--1--2
+    public float laneDistance = 3f;
+    public float jumpForce;
+    public float Gravity = -20;
+    public Animator animator;
+    private bool isSliding = false;
+    void Start()
+    {
+        controller = GetComponent<CharacterController>();
+        Time.timeScale = 1.2f;
+    }
+    private void FixedUpdate()
+    {
+        if (!PlayerManager.isGameStarted)
+        {
+            return;
+        }
+        controller.Move(direction * Time.fixedDeltaTime);
+    }
+    void Update()
+    {
+        if (!PlayerManager.isGameStarted)
+        {
+            return;
+        }
+        if (PlayerManager.gameOver)
+        {
+            forwardSpeed = 0;
+        }
+        animator.SetBool("isGameStarted", true);
+        animator.SetBool("isGrounded", controller.isGrounded);
+        if (forwardSpeed < maxSpeed)
+        {
+            forwardSpeed += 0.015f * Time.deltaTime;
+        }
+        direction.z = forwardSpeed;
+        if (controller.isGrounded)
+        {
+            if (RunManager.move == 3 || Input.GetKeyDown(KeyCode.W) || Input.GetKeyDown(KeyCode.Space))
+            {
+                Jump();
+                RunManager.move = 0; // Reset lại lệnh để không nhảy liên tục
+            }
+        }
+        else
+        {
+            direction.y += Gravity * Time.deltaTime;
+        }
+        if ((RunManager.move == 4 || Input.GetKeyDown(KeyCode.S) || Input.GetKeyDown(KeyCode.DownArrow)) && !isSliding)
+        {
+            StartCoroutine(Slide());
+            RunManager.move = 0; // Reset lại lệnh
+        }
+        if (RunManager.move == 1 || Input.GetKeyDown(KeyCode.D) || Input.GetKeyDown(KeyCode.RightArrow))
+        {
+            desiredLane++;
+            if (desiredLane == 3)
+                desiredLane = 2;
+            else
+            {
+                StartCoroutine(Right());
+            }
+            RunManager.move = 0; // Reset lại lệnh
+        }
+        if (RunManager.move == 2 || Input.GetKeyDown(KeyCode.A) || Input.GetKeyDown(KeyCode.LeftArrow))
+        {
+            desiredLane--;
+            if (desiredLane == -1)
+                desiredLane = 0;
+            else
+            {
+                StartCoroutine(Left());
+            }
+            RunManager.move = 0; // Reset lại lệnh
+        }
+        if (RunManager.move == 5)
+        {
+            ResetToMiddleLane();
+            RunManager.move = 0;
+        }
+        Vector3 targetPosition = transform.position.z * transform.forward + transform.position.y * transform.up;
+        if (desiredLane == 0)
+        {
+            targetPosition += Vector3.left * laneDistance;
+        }
+        else if (desiredLane == 2)
+        {
+            targetPosition += Vector3.right * laneDistance;
+        }
+        if (transform.position == targetPosition)
+        {
+            return;
+        }
+        Vector3 diff = targetPosition - transform.position;
+        Vector3 moveDir = diff.normalized * 25 * Time.deltaTime;
+        if (moveDir.sqrMagnitude < diff.sqrMagnitude)
+        {
+            controller.Move(moveDir);
+        }
+        else
+        {
+            controller.Move(diff);
+        }
+    }
+    private void Jump()
+    {
+        direction.y = jumpForce;
+    }
+    private void OnControllerColliderHit(ControllerColliderHit hit)
+    {
+        if (hit.transform.CompareTag("Obstacle"))
+        {
+            PlayerManager.gameOver = true;
+            animator.SetBool("isGameOver", true);
+        }
+        else if (hit.transform.CompareTag("Table"))
+        {
+            Vector3 hitNormal = hit.normal;
+            if (Vector3.Dot(hitNormal, Vector3.forward) < -0.7f)
+            {
+                PlayerManager.gameOver = true;
+                animator.SetBool("isGameOver", true);
+            }
+        }
+        else if (hit.transform.CompareTag("FruitPortal"))
+        {
+            int point = (int)PlayerManager.point;
+            PlayerPrefs.SetInt("Score", point);
+            SceneManager.LoadScene("Fruit");
+        }
+    }
+    private IEnumerator Slide()
+    {
+        isSliding = true;
+        Debug.Log("Slide");
+        animator.SetBool("isSliding", true);
+        controller.center = new Vector3(0, -0.5f, 0);
+        controller.height = 0.2f;
+        yield return new WaitForSeconds(1.3f);
+        controller.center = new Vector3(0, 0, 0);
+        controller.height = 2;
+        Debug.Log("No Slide");
+        animator.SetBool("isSliding", false);
+        isSliding = false;
+    }
+    private IEnumerator Left()
+    {
+        Debug.Log("Left");
+        animator.SetBool("isLeft", true);
+        yield return new WaitForSeconds(1f);
+        animator.SetBool("isLeft", false);
+        Debug.Log("No Left");
+    }
+    private IEnumerator Right()
+    {
+        Debug.Log("Right");
+        animator.SetBool("isRight", true);
+        yield return new WaitForSeconds(1f);
+        animator.SetBool("isRight", false);
+        Debug.Log("No Right");
+    }
+    public void ResetToMiddleLane()
+    {
+        desiredLane = 1; // Lane giữa
+        Debug.Log("Reset to middle lane");
+    }
+}
+
+// Run\PlayerManager.cs
+using System.Collections;
+using System.Collections.Generic;
+using UnityEngine;
+using UnityEngine.UI;
+public class PlayerManager : MonoBehaviour
+{
+    public static bool gameOver;
+    public GameObject gameOverPanel;
+    public static bool isGameStarted;
+    public static float initial_point;
+    public static float point;
+    public Text pointText;
+    public Text GameOverPointText;
+    private PlayerController playerController;
+    private Vector3 startPosition;
+    public static int numberOfCoins;
+    public Text coinsText;
+    public Text highscoreText;
+    private int highscore;
+    public CursorController cursorController;
+    void Start()
+    {
+        gameOver = false;
+        isGameStarted = true;
+        Time.timeScale = 1.0f;
+        initial_point = PlayerPrefs.GetInt("point", 0);
+        pointText.text = "Score: " + initial_point;
+        numberOfCoins = PlayerPrefs.GetInt("Coins", 0);
+        coinsText.text = "Coins: " + numberOfCoins;
+        highscore = PlayerPrefs.GetInt("Highscore", 0);
+        highscoreText.text = "Highscore: " + highscore;
+        playerController = FindObjectOfType<PlayerController>();
+        startPosition = playerController.transform.position;
+    }
+    void Update()
+    {
+        if (gameOver)
+        {
+            StartCoroutine(EndGame(2f));
+        }
+        if (RunManager.move == 5 && !isGameStarted)
+        {
+            isGameStarted = true;
+        }
+        if (isGameStarted && !gameOver)
+        {
+            UpdateScore();
+        }
+        coinsText.text = "Coins: " + numberOfCoins;
+    }
+    void UpdateScore()
+    {
+        float distance = Vector3.Distance(startPosition, playerController.transform.position);
+        point = initial_point + distance; // Add distance to the initial point
+        pointText.text = "Score: " + Mathf.Floor(point);
+    }
+    IEnumerator EndGame(float delay)
+    {
+        yield return new WaitForSeconds(delay);
+        GameOverPointText.text = "SCORE: " + Mathf.FloorToInt(point);
+        PlayerPrefs.SetInt("Coins", numberOfCoins);
+        if (Mathf.FloorToInt(point) > highscore)
+        {
+            highscore = Mathf.FloorToInt(point);
+            PlayerPrefs.SetInt("Highscore", highscore);
+            highscoreText.text = "Highscore: " + highscore;
+        }
+        PlayerPrefs.SetFloat("point", 0);
+        gameOverPanel.SetActive(true);
+        cursorController.SetCursorCanvas(gameOverPanel.GetComponent<Canvas>());
+        Time.timeScale = 0;
+    }
+}
+
+// Run\RunManager.cs
+using System.Collections;
+using System.Collections.Generic;
+using UnityEngine;
+public class RunManager : MonoBehaviour
+{
+    public SocketClient socketClient;
+    public static int move;
+    private int previousMove = -1;
+    private float lastChangeTime = 0.0f;
+    private const float delay = 0.3f; // 0.5 seconds delay
+    void Start()
+    {
+        if (socketClient == null)
+        {
+            socketClient = FindObjectOfType<SocketClient>();
+            if (socketClient == null)
+            {
+                Debug.LogError("SocketClient is not assigned and not found in the scene.");
+                return;
+            }
+        }
+    }
+    void Update()
+    {
+        if (socketClient != null)
+        {
+            string data = socketClient.Data;
+            if (string.IsNullOrEmpty(data))
+            {
+                Debug.LogWarning("Received empty or null data from SocketClient.");
+                return;
+            }
+            Debug.Log("Received Data: " + data);
+            data = data.Replace("[", "").Replace("]", "");
+            data = data.Replace("(", "").Replace(")", "");
+            string[] points = data.Split(',');
+            if (points.Length > 22)
+            {
+                if (int.TryParse(points[22], out int result))
+                {
+                    float currentTime = Time.time;
+                    if (result == previousMove)
+                    {
+                        if (currentTime - lastChangeTime < delay)
+                        {
+                            move = 0;
+                        }
+                        else
+                        {
+                            move = result;
+                        }
+                    }
+                    else
+                    {
+                        move = result;
+                        previousMove = result;
+                        lastChangeTime = currentTime;
+                    }
+                }
+                else
+                {
+                    Debug.LogWarning("Unable to parse move value.");
+                }
+            }
+            else
+            {
+                Debug.LogWarning("Data does not contain enough points.");
+            }
+        }
+        else
+        {
+            Debug.LogWarning("SocketClient is null");
+        }
+    }
+}
+
+// Run\TileManager.cs
+using System.Collections;
+using System.Collections.Generic;
+using UnityEngine;
+public class TileManager : MonoBehaviour
+{
+    public GameObject[] tilePrefabs;
+    public GameObject[] startPrefabs;
+    private List<GameObject> activeTiles = new List<GameObject>();
+    public float zSpawn = 15;
+    public float tileLength = 35;
+    public int numberOfTiles = 5;
+    public Transform playerTransform;
+    void Start()
+    {
+        for (int i = 0; i < numberOfTiles; i++)
+        {
+            if (i == 0)
+            {
+                StartTile(Random.Range(0, startPrefabs.Length));
+            } else
+            {
+                SpawnTile(Random.Range(0, tilePrefabs.Length));
+            }
+        }
+    }
+    void Update()
+    {
+        if (playerTransform.position.z - 65 > zSpawn - (numberOfTiles * tileLength))
+        {
+            SpawnTile(Random.Range(0, tilePrefabs.Length));
+            DeleteTile();
+        }
+    }
+    public void SpawnTile(int tileIndex)
+    {
+        GameObject go = Instantiate(tilePrefabs[tileIndex], transform.forward * zSpawn, transform.rotation);
+        activeTiles.Add(go);
+        zSpawn += tileLength;
+    }
+    public void StartTile(int tileIndex)
+    {
+        GameObject go = Instantiate(startPrefabs[tileIndex], transform.forward * zSpawn, transform.rotation);
+        activeTiles.Add(go);
+        zSpawn += tileLength;
+    }
+    private void DeleteTile()
+    {
+        Destroy(activeTiles[0]);
+        activeTiles.RemoveAt(0);
+    }
+}
+
