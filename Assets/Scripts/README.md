@@ -1,30 +1,15 @@
-# HAU Active 🏃‍♂️🎮
+# HAU Active Scripts & Modules 🏃‍♂️🎮
 
-**A computer vision-based fitness game built with Unity 3D and MediaPipe.**
+> 📚 **Tài liệu chính thức của toàn bộ dự án:** Vui lòng xem [Root README.md](../../README.md) và thư mục [Docs/](../../Docs) để xem tài liệu trực quan đầy đủ với sơ đồ, hình ảnh, demo và hướng dẫn chi tiết.
 
-> **Author:** Nguyễn Vũ Minh Long  
-> **Institution:** Hanoi Architectural University (Faculty of IT)  
-> **Thesis Project:** 2026
+- **Kiến trúc hệ thống:** [Docs/SYSTEM_ARCHITECTURE.md](../../Docs/SYSTEM_ARCHITECTURE.md)
+- **Đặc tả thuật toán:** [Docs/ALGORITHMS.md](../../Docs/ALGORITHMS.md)
+- **Cẩm nang gameplay:** [Docs/GAMEPLAY_GUIDE.md](../../Docs/GAMEPLAY_GUIDE.md)
 
-![Unity](https://img.shields.io/badge/Unity-2021.3+-black?style=flat&logo=unity)
-![Python](https://img.shields.io/badge/Python-3.8+-3776AB?style=flat&logo=python)
-![MediaPipe](https://img.shields.io/badge/MediaPipe-Pose%20Estimation-orange)
+---
 
-## 📖 Overview
+## 📖 Tổng quan Thư mục Scripts
 
-**HAU Active** is an "Exergame" (Exercise Game) designed to combat sedentary lifestyles among students. It allows players to control a 3D character in an endless runner game using real-time body movements captured by a standard webcam.
-
-Unlike traditional Kinect or VR setups, HAU Active requires **no wearable sensors or expensive hardware**. It utilizes a Python backend to process video feeds via **Google MediaPipe** and transmits skeletal data to a **Unity** frontend via TCP Sockets.
-
-### Key Features
-
--   **Touchless Interface:** Navigate menus and play games using hand gestures.
--   **Endless Runner Mode:** Lean left/right to switch lanes, jump to clear hurdles, and squat to slide under obstacles.
--   **Mini-Games:**
-    -   _Fruit Slicing:_ Hand-tracking based reflex game.
-    -   _Shape Fitting:_ Upper-body pose matching game.
--   **Dynamic Calibration:** Algorithm automatically adjusts to the player's height and distance from the camera.
--   **HAU Campus Environment:** A 3D recreation of the Hanoi Architectural University hallways.
 
 ---
 
