@@ -50,9 +50,9 @@ $$d = \sqrt{(x_{19} - x_{20})^2 + (y_{19} - y_{20})^2}$$
 
 **Điều kiện kích hoạt Khóa (`Locked`):**
 $$\begin{cases}
-d < \text{threshold\_clap} \quad (0.05) \\
-\text{clap\_confirm\_count} \ge \text{clap\_confirm\_frames} \quad (3\text{ frames}) \\
-\text{clap\_cooldown} = 0
+d < d_{\text{clap}} \quad (0.05) \\
+\text{confirm\_count} \ge N_{\text{confirm}} \quad (3\text{ frames}) \\
+t_{\text{cooldown}} = 0
 \end{cases}$$
 
 Sau khi thỏa mãn, biến `bool_locked` chuyển sang `True`, thiết lập lại tọa độ gốc và gán `clap_cooldown = 30` khung hình ($\approx 1\text{s}$) để chống lặp lệnh.
@@ -67,17 +67,17 @@ Tại thời điểm khóa thành công, kích thước hình học của thân 
 
 Các đường ngưỡng giới hạn ảo được tính toán tỷ lệ thuận theo cơ thể:
 
-$$L_{\text{fixed}} = x_{11} \cdot W + W_{\text{torso}} \cdot \text{threshold\_horizontal}$$
+$$L_{\text{fixed}} = x_{11} \cdot W + W_{\text{torso}} \cdot k_{\text{horizontal}}$$
 
-$$R_{\text{fixed}} = x_{12} \cdot W - W_{\text{torso}} \cdot \text{threshold\_horizontal}$$
+$$R_{\text{fixed}} = x_{12} \cdot W - W_{\text{torso}} \cdot k_{\text{horizontal}}$$
 
-$$U_{\text{fixed}} = y_{12} \cdot H - H_{\text{torso}} \cdot |\text{threshold\_vertical}|$$
+$$U_{\text{fixed}} = y_{12} \cdot H - H_{\text{torso}} \cdot |k_{\text{vertical}}|$$
 
-$$D_{\text{fixed}} = y_{24} \cdot H + H_{\text{torso}} \cdot |\text{threshold\_vertical}|$$
+$$D_{\text{fixed}} = y_{24} \cdot H + H_{\text{torso}} \cdot |k_{\text{vertical}}|$$
 
 *Cấu hình tham số chuẩn (`config.py`):*
-- $\text{threshold\_horizontal} = 0.0$ (Ngưỡng nhạy nghiêng người)
-- $\text{threshold\_vertical} = -0.2$ (Ngưỡng nhạy bật nhảy / ngồi xổm)
+- $k_{\text{horizontal}} = 0.0$ (Ngưỡng nhạy nghiêng người)
+- $k_{\text{vertical}} = -0.2$ (Ngưỡng nhạy bật nhảy / ngồi xổm)
 
 ---
 
